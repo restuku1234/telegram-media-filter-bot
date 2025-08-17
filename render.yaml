@@ -12,6 +12,8 @@ services:
         sync: false
       - key: TOPIC_PAP_LACUR
         sync: false
+        key: TOPIC_EKSIB
+        sync: false
       - key: TOPIC_PAP_PISANG
         sync: false
       - key: ADMIN_IDS
