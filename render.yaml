@@ -5,14 +5,10 @@ services:
     pythonVersion: 3.12.6
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py
-
     envVars:
       - key: BOT_TOKEN
-        fromDatabase: false
         value: "8167264410:AAHYQgPVe_HyqIQLxZ6yuGFABWCw5Bb-P74"
       - key: GROUP_ID
-        fromDatabase: false
         value: "-1002754430828"
       - key: ADMIN_IDS
-        fromDatabase: false
         value: "6046272730"
