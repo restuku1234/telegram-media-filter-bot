@@ -7,7 +7,7 @@ services:
     startCommand: "python main.py"
     envVars:
       - key: TOKEN
-        value: "8069081808:AAG6T8ytFHqK_Kx9qLpLGEHz9ugSW0higj0"
+        value: "8167264410:AAHYQgPVe_HyqIQLxZ6yuGFABWCw5Bb-P74"
       - key: CHAT_ID
         value: "-1002754430828"
       - key: ADMIN_IDS
