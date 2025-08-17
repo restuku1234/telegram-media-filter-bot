@@ -1,29 +1,15 @@
+# render.yaml
 services:
   - type: web
     name: telegram-media-filter-bot
     env: python
-    plan: starter
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python main.py"
+    pythonVersion: 3.13
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
     envVars:
       - key: TOKEN
         value: "8167264410:AAHYQgPVe_HyqIQLxZ6yuGFABWCw5Bb-P74"
       - key: CHAT_ID
-        value: "-1002754430828"
+        value: "-1002754430828" # Supergroup Eksib
       - key: ADMIN_IDS
         value: "6046272730"
-      - key: TOPIC_MENFESS
-        value: "5071"
-      - key: TOPIC_MOAN_CWE
-        value: "5046"
-      - key: TOPIC_MOAN_CWO
-        value: "5013"
-      - key: TOPIC_PAP_CWO
-        value: "5052"
-      - key: TOPIC_PAP_LACUR
-        value: "5048"
-      - key: TOPIC_PAP_PISANG
-        value: "5052" 
-      - key: TOPIC_EKSIB
-        value: "5529"
-    autoDeploy: true
