@@ -1,0 +1,18 @@
+services:
+  - type: worker
+    name: anon-eksib-bot
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python main.py"
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: CHAT_ID
+        sync: false
+      - key: TOPIC_PAP_LACUR
+        sync: false
+      - key: TOPIC_PAP_PISANG
+        sync: false
+      - key: ADMIN_IDS
+        sync: false
