@@ -21,7 +21,6 @@ TOPICS = {
 # Simpan state sementara user
 user_state = {}
 
-
 # ===== START =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.chat.type != "private":
@@ -41,8 +40,32 @@ async def topic_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     topic_name = query.data.replace("topic_", "")
     user_state[user_id] = {"topic": topic_name}
 
-    # Pilihan auto-delete
-    keyboard = [
+    if topic_name == "Menfess":
+        keyboard_gender = [
+            [InlineKeyboardButton("👩 Cewek", callback_data="gender_cwe")],
+            [InlineKeyboardButton("👦 Cowok", callback_data="gender_cwo")]
+        ]
+        await query.message.reply_text("✅ Pilih gender pengirim:", reply_markup=InlineKeyboardMarkup(keyboard_gender))
+    else:
+        keyboard_delete = [
+            [
+                InlineKeyboardButton("Tidak", callback_data="delete_none"),
+                InlineKeyboardButton("30 menit", callback_data="delete_30"),
+                InlineKeyboardButton("1 jam", callback_data="delete_60"),
+                InlineKeyboardButton("2 jam", callback_data="delete_120")
+            ]
+        ]
+        await query.message.reply_text(f"✅ Kamu pilih topik: {topic_name}\n🕒 Pilih opsi hapus otomatis:", reply_markup=InlineKeyboardMarkup(keyboard_delete))
+
+# ===== PILIH GENDER =====
+async def gender_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    choice = query.data
+    user_state[user_id]["gender"] = "👩 Cewek" if choice == "gender_cwe" else "👦 Cowok"
+
+    keyboard_delete = [
         [
             InlineKeyboardButton("Tidak", callback_data="delete_none"),
             InlineKeyboardButton("30 menit", callback_data="delete_30"),
@@ -50,8 +73,7 @@ async def topic_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("2 jam", callback_data="delete_120")
         ]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.message.reply_text(f"✅ Kamu pilih topik: {topic_name}\n🕒 Pilih opsi hapus otomatis:", reply_markup=reply_markup)
+    await query.message.reply_text("✅ Gender tersimpan. Pilih opsi hapus otomatis:", reply_markup=InlineKeyboardMarkup(keyboard_delete))
 
 # ===== PILIH AUTO-DELETE =====
 async def auto_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -68,9 +90,8 @@ async def auto_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYPE)
         minutes = int(choice.split("_")[1])
         user_state[user_id]["delete_minutes"] = minutes
 
-    keyboard = [[InlineKeyboardButton("Reset / Pilih Topik Baru", callback_data="reset")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.message.reply_text("✅ Pilihan tersimpan. Sekarang kirim media atau pesanmu.", reply_markup=reply_markup)
+    keyboard_reset = [[InlineKeyboardButton("Reset / Pilih Topik Baru", callback_data="reset")]]
+    await query.message.reply_text("✅ Pilihan tersimpan. Sekarang kirim konten sesuai topik.", reply_markup=InlineKeyboardMarkup(keyboard_reset))
 
 # ===== RESET =====
 async def reset_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -92,67 +113,62 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     topic_name = user_state[uid]["topic"]
     message_thread_id = TOPICS[topic_name]
-    gender_icon = "👩‍🦰 Cewek" if update.message.from_user.username and update.message.from_user.username.lower().startswith("cwe") else "👦 Cowok"
-    prefix = f"🕵 Pesan anonim dari: {gender_icon}"
+    gender = user_state[uid].get("gender", "👤 Anonim")
+    emoji_reaction = "🔥 💦 😍"
 
-    # ===== Menfess atau teks =====
-    if topic_name in ["Menfess"]:
-        if update.message.text:
-            content = update.message.text
-            sent_msg = await context.bot.send_message(
+    # MENFESS
+    if topic_name == "Menfess" and update.message.text:
+        text = update.message.text
+        sent_msg = await context.bot.send_message(
+            chat_id=CHAT_ID,
+            message_thread_id=message_thread_id,
+            text=f"🕵 Pesan anonim dari: {gender}\n💬 Pesan: {text}\n{emoji_reaction}"
+        )
+
+    # MOAN (voice)
+    elif topic_name.startswith("Moan") and (update.message.voice or update.message.audio):
+        media = update.message.voice.file_id if update.message.voice else update.message.audio.file_id
+        sent_msg = await context.bot.send_voice(
+            chat_id=CHAT_ID,
+            message_thread_id=message_thread_id,
+            voice=media,
+            caption=f"🕵 Voice dari: {gender}\n{emoji_reaction}"
+        )
+
+    # PAP / Eksib (foto/video)
+    elif topic_name.startswith("Pap") or topic_name == "Eksib":
+        caption = update.message.caption or ""
+        if update.message.photo:
+            file_id = update.message.photo[-1].file_id
+            sent_msg = await context.bot.send_photo(
                 chat_id=CHAT_ID,
                 message_thread_id=message_thread_id,
-                text=f"{prefix}\n\n💬 Pesan: {content}\n\nemoji: 🔥 💦 😍"
+                photo=file_id,
+                caption=f"🕵 Pesan anonim dari: {gender}\n{caption}\n{emoji_reaction}"
             )
-            # Notifikasi admin
-            for admin_id in ADMIN_IDS:
-                await context.bot.send_message(
-                    chat_id=admin_id,
-                    text=f"[{topic_name}] {prefix}\n{content}"
-                )
-
-    # ===== Pap / Eksib =====
-    elif topic_name in ["Pap Pisang","Pap Cwo","Pap Lacur","Eksib"]:
-        if update.message.photo or update.message.video:
-            media = update.message.photo[-1].file_id if update.message.photo else update.message.video.file_id
-            caption = update.message.caption or "Tidak ada caption"
-            if update.message.photo:
-                sent_msg = await context.bot.send_photo(
-                    chat_id=CHAT_ID,
-                    message_thread_id=message_thread_id,
-                    photo=media,
-                    caption=f"{prefix}\nFoto/Video + Caption: {caption}\nemoji: 🔥 💦 😍"
-                )
-            else:
-                sent_msg = await context.bot.send_video(
-                    chat_id=CHAT_ID,
-                    message_thread_id=message_thread_id,
-                    video=media,
-                    caption=f"{prefix}\nFoto/Video + Caption: {caption}\nemoji: 🔥 💦 😍"
-                )
-            # Notifikasi admin
-            for admin_id in ADMIN_IDS:
-                if update.message.photo:
-                    await context.bot.send_photo(admin_id, media, caption=f"[{topic_name}] {prefix}\n{caption}")
-                else:
-                    await context.bot.send_video(admin_id, media, caption=f"[{topic_name}] {prefix}\n{caption}")
-
-    # ===== Moan (voice only) =====
-    elif topic_name in ["Moan Cwo","Moan Cwe"]:
-        if update.message.voice or update.message.audio:
-            media = update.message.voice.file_id if update.message.voice else update.message.audio.file_id
-            sent_msg = await context.bot.send_voice(
+        elif update.message.video:
+            file_id = update.message.video.file_id
+            sent_msg = await context.bot.send_video(
                 chat_id=CHAT_ID,
                 message_thread_id=message_thread_id,
-                voice=media,
-                caption=f"{prefix}\nVoice Note + Caption: {update.message.caption or 'Tidak ada caption'}\nemoji: 🔥 💦 😍"
+                video=file_id,
+                caption=f"🕵 Pesan anonim dari: {gender}\n{caption}\n{emoji_reaction}"
             )
-            # Notifikasi admin
-            for admin_id in ADMIN_IDS:
-                await context.bot.send_voice(admin_id, media, caption=f"[{topic_name}] {prefix}\n{update.message.caption or 'Tidak ada caption'}")
-
+        else:
+            await update.message.reply_text("⚠️ Kirim foto atau video saja untuk topik ini.")
+            return
     else:
-        await update.message.reply_text("⚠️ Media tidak sesuai dengan topik.")
+        await update.message.reply_text("⚠️ Konten tidak sesuai dengan topik.")
+        return
+
+    # Kirim notifikasi ke admin
+    for admin_id in ADMIN_IDS:
+        await context.bot.send_message(
+            chat_id=admin_id,
+            text=f"[{topic_name}] Kiriman baru dari {gender}"
+        )
+
+    await update.message.reply_text(f"✅ Konten berhasil dikirim ke '{topic_name}' dan admin diberi notifikasi.")
 
     # Auto-delete
     if user_state[uid].get("auto_delete"):
@@ -168,9 +184,10 @@ async def auto_delete_message(context, chat_id, message_id, minutes):
         pass
 
 # ===== MAIN =====
-app = Application.builder().token(TOKEN).build()
+app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CallbackQueryHandler(topic_choice, pattern="^topic_"))
+app.add_handler(CallbackQueryHandler(gender_choice, pattern="^gender_"))
 app.add_handler(CallbackQueryHandler(auto_delete_choice, pattern="^delete_"))
 app.add_handler(CallbackQueryHandler(reset_choice, pattern="^reset$"))
 app.add_handler(MessageHandler(filters.ALL, handle_media))
