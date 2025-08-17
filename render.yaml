@@ -1,14 +1,14 @@
 services:
-  - type: background
+  - type: worker
     name: telegram-media-filter-bot
     env: python
-    plan: starter
+    region: oregon
+    branch: main
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py
+    instanceType: starter
     envVars:
       - key: BOT_TOKEN
-        value: "8167264410:AAHYQgPVe_HyqIQLxZ6yuGFABWCw5Bb-P74"
-      - key: GROUP_ID
-        value: "-1002754430828"
+        fromDatabase: false
       - key: ADMIN_IDS
-        value: "6046272730"
+        fromDatabase: false
