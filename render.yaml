@@ -3,8 +3,8 @@ services:
     name: telegram-media-filter-bot
     env: python
     plan: starter
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python main.py"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
     envVars:
       - key: BOT_TOKEN
         value: "8167264410:AAHYQgPVe_HyqIQLxZ6yuGFABWCw5Bb-P74"
