@@ -1,27 +1,23 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, InputMediaVideo
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
-import asyncio
 import os
+import asyncio
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-# === KONFIGURASI BOT DARI ENV ===
+# ===== KONFIGURASI BOT DARI ENV =====
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = int(os.getenv("CHAT_ID"))
-ADMIN_IDS = list(map(int, os.getenv("ADMIN_IDS").split(',')))
+ADMIN_IDS = list(map(int, os.getenv("ADMIN_IDS", "").split(",")))
 
 TOPICS = {
-    "Menfess": int(os.getenv("TOPIC_MENFESS")),
-    "Moan Cwe": int(os.getenv("TOPIC_MOAN_CWE")),
-    "Moan Cwo": int(os.getenv("TOPIC_MOAN_CWO")),
-    "Pap Cwo": int(os.getenv("TOPIC_PAP_CWO")),
-    "Pap Lacur": int(os.getenv("TOPIC_PAP_LACUR")),
-    "Pap Pisang": int(os.getenv("TOPIC_PAP_PISANG")),
-    "Eksib": int(os.getenv("TOPIC_EKSIB"))
+    "Menfess": 5071,
+    "Pap Pisang": 5052,
+    "Pap Cwo": 5052,
+    "Pap Lacur": 5048,
+    "Eksib": 5529,
+    "Moan Cwo": 5013,
+    "Moan Cwe": 5046,
 }
 
-# Emoji default untuk interaksi di grup
-DEFAULT_EMOJI = ["🔥", "💦", "😍"]
-
-# Simpan state sementara user
 user_state = {}
 
 # ===== START =====
@@ -43,7 +39,6 @@ async def topic_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     topic_name = query.data.replace("topic_", "")
     user_state[user_id] = {"topic": topic_name}
 
-    # Pilihan auto-delete
     keyboard = [
         [
             InlineKeyboardButton("Tidak", callback_data="delete_none"),
@@ -53,7 +48,7 @@ async def topic_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.message.reply_text(f"✅ Kamu pilih topik: {topic_name}\n🕒 Pilih opsi hapus otomatis:", reply_markup=reply_markup)
+    await query.message.reply_text(f"✅ Topik: {topic_name}\n🕒 Pilih auto-delete:", reply_markup=reply_markup)
 
 # ===== PILIH AUTO-DELETE =====
 async def auto_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -72,7 +67,7 @@ async def auto_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     keyboard = [[InlineKeyboardButton("Reset / Pilih Topik Baru", callback_data="reset")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.message.reply_text("✅ Pilihan tersimpan. Sekarang kirim pesan/foto/video ke bot.", reply_markup=reply_markup)
+    await query.message.reply_text("✅ Pilihan tersimpan. Sekarang kirim media atau pesanmu.", reply_markup=reply_markup)
 
 # ===== RESET =====
 async def reset_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -94,55 +89,48 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     topic_name = user_state[uid]["topic"]
     message_thread_id = TOPICS[topic_name]
+    gender_icon = "👩‍🦰 Cewek" if update.message.from_user.username and update.message.from_user.username.lower().startswith("cwe") else "👦 Cowok"
+    prefix = f"🕵 Pesan anonim dari: {gender_icon}"
 
-    # Format untuk Menfess atau Pap Lacur / Eksib
-    if topic_name in ["Menfess"]:
-        gender_emoji = "👩‍🦰 Cewek"  # default bisa ditambah input user nanti
-        text = update.message.text or ""
-        caption = f"🕵 Pesan anonim dari: {gender_emoji}\nisi pesan: {text}\nemoji: {' '.join(DEFAULT_EMOJI)}"
-        sent_msg = await context.bot.send_message(chat_id=CHAT_ID, message_thread_id=message_thread_id, text=caption)
-    elif topic_name in ["Moan Cwe", "Moan Cwo"]:
-        # hanya voice
-        if update.message.voice:
-            file_id = update.message.voice.file_id
-            sent_msg = await context.bot.send_voice(chat_id=CHAT_ID, message_thread_id=message_thread_id, voice=file_id)
-            # kirim ke admin
-            for admin_id in ADMIN_IDS:
-                await context.bot.send_voice(chat_id=admin_id, voice=file_id, caption=f"[{topic_name}] Voice dikirim")
-        else:
-            await update.message.reply_text("⚠️ Hanya file suara yang diterima di topik ini.")
-            return
-    else:
-        # Pap / Eksib / Pap Pisang: foto/video
-        media_sent = False
+    # ===== Menfess / teks =====
+    if topic_name in ["Menfess"] and update.message.text:
+        content = update.message.text
+        sent_msg = await context.bot.send_message(
+            chat_id=CHAT_ID,
+            message_thread_id=message_thread_id,
+            text=f"{prefix}\n\n💬 Pesan: {content}\n\nemoji: 🔥 💦 😍"
+        )
+        for admin_id in ADMIN_IDS:
+            await context.bot.send_message(chat_id=admin_id, text=f"[{topic_name}] {prefix}\n{content}")
+
+    # ===== Pap / Eksib =====
+    elif topic_name in ["Pap Pisang","Pap Cwo","Pap Lacur","Eksib"] and (update.message.photo or update.message.video):
+        media = update.message.photo[-1].file_id if update.message.photo else update.message.video.file_id
+        caption = update.message.caption or "Tidak ada caption"
         if update.message.photo:
-            file_id = update.message.photo[-1].file_id
-            caption = update.message.caption or ""
-            sent_msg = await context.bot.send_photo(chat_id=CHAT_ID, message_thread_id=message_thread_id, photo=file_id, caption=caption)
-            media_sent = True
-        elif update.message.video:
-            file_id = update.message.video.file_id
-            caption = update.message.caption or ""
-            sent_msg = await context.bot.send_video(chat_id=CHAT_ID, message_thread_id=message_thread_id, video=file_id, caption=caption)
-            media_sent = True
+            sent_msg = await context.bot.send_photo(chat_id=CHAT_ID, message_thread_id=message_thread_id, photo=media, caption=f"{prefix}\nFoto/Video + Caption: {caption}\nemoji: 🔥 💦 😍")
         else:
-            await update.message.reply_text("⚠️ Kirim foto atau video beserta caption.")
-            return
-        # Kirim ke admin
+            sent_msg = await context.bot.send_video(chat_id=CHAT_ID, message_thread_id=message_thread_id, video=media, caption=f"{prefix}\nFoto/Video + Caption: {caption}\nemoji: 🔥 💦 😍")
         for admin_id in ADMIN_IDS:
             if update.message.photo:
-                await context.bot.send_photo(chat_id=admin_id, photo=file_id, caption=f"[{topic_name}] {caption}")
-            elif update.message.video:
-                await context.bot.send_video(chat_id=admin_id, video=file_id, caption=f"[{topic_name}] {caption}")
+                await context.bot.send_photo(admin_id, media, caption=f"[{topic_name}] {prefix}\n{caption}")
+            else:
+                await context.bot.send_video(admin_id, media, caption=f"[{topic_name}] {prefix}\n{caption}")
 
-    # Auto-delete
-    if user_state[uid].get("auto_delete") and topic_name not in ["Menfess"]:
+    # ===== Moan (voice only) =====
+    elif topic_name in ["Moan Cwo","Moan Cwe"] and (update.message.voice or update.message.audio):
+        media = update.message.voice.file_id if update.message.voice else update.message.audio.file_id
+        sent_msg = await context.bot.send_voice(chat_id=CHAT_ID, message_thread_id=message_thread_id, voice=media, caption=f"{prefix}\nVoice Note + Caption: {update.message.caption or 'Tidak ada caption'}\nemoji: 🔥 💦 😍")
+        for admin_id in ADMIN_IDS:
+            await context.bot.send_voice(admin_id, media, caption=f"[{topic_name}] {prefix}\n{update.message.caption or 'Tidak ada caption'}")
+    else:
+        await update.message.reply_text("⚠️ Media tidak sesuai dengan topik.")
+
+    # ===== Auto-delete =====
+    if user_state[uid].get("auto_delete"):
         minutes = user_state[uid]["delete_minutes"]
         asyncio.create_task(auto_delete_message(context, CHAT_ID, sent_msg.message_id, minutes))
 
-    await update.message.reply_text(f"✅ Pesan/foto/video berhasil dikirim ke '{topic_name}' dan admin diberi notifikasi.")
-
-# ===== AUTO DELETE =====
 async def auto_delete_message(context, chat_id, message_id, minutes):
     await asyncio.sleep(minutes * 60)
     try:
