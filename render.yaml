@@ -2,9 +2,10 @@ services:
   - type: web
     name: telegram-media-filter-bot
     env: python
-    plan: free
+    pythonVersion: 3.12.6
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py
+
     envVars:
       - key: BOT_TOKEN
         fromDatabase: false
