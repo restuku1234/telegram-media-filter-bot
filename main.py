@@ -1,19 +1,19 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 import asyncio
+import os
 
-# === KONFIGURASI BOT ===
-TOKEN = "8069081808:AAG6T8ytFHqK_Kx9qLpLGEHz9ugSW0higj0"
-CHAT_ID = -1002754430828  # ID grup utama
-ADMIN_IDS = [6046272730]  # List admin
+# ===== KONFIGURASI BOT =====
+TOKEN = os.getenv("BOT_TOKEN") or "YOUR_BOT_TOKEN"
+ADMIN_IDS = [int(x) for x in (os.getenv("ADMIN_IDS") or "6046272730").split(",")]
 TOPICS = {
-    "Menfess": 5071,
-    "Pap Pisang": 5052,
-    "Pap Cwo": 5052,
-    "Pap Lacur": 5048,
-    "Eksib": 5529,
-    "Moan Cwo": 5013,
-    "Moan Cwe": 5046,
+    "Menfess": -1005071,
+    "Pap Pisang": -1005052,
+    "Pap Cwo": -1005052,
+    "Pap Lacur": -1005048,
+    "Eksib": -1005529,
+    "Moan Cwo": -1005013,
+    "Moan Cwe": -1005046,
 }
 
 # Simpan state sementara user
@@ -88,73 +88,57 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     topic_name = user_state[uid]["topic"]
-    message_thread_id = TOPICS[topic_name]
-    gender_icon = "👩‍🦰 Cewek" if update.message.from_user.username and update.message.from_user.username.lower().startswith("cwe") else "👦 Cowok"
+    chat_id = TOPICS[topic_name]
+
+    # Gender otomatis
+    gender_icon = "👩‍🦰 Cewek" if hasattr(update.message.from_user, 'first_name') and update.message.from_user.first_name.lower().startswith("cwe") else "👦 Cowok"
     prefix = f"🕵 Pesan anonim dari: {gender_icon}"
 
-    # ===== Menfess atau teks =====
-    if topic_name in ["Menfess"]:
-        if update.message.text:
-            content = update.message.text
-            sent_msg = await context.bot.send_message(
-                chat_id=CHAT_ID,
-                message_thread_id=message_thread_id,
-                text=f"{prefix}\n\n💬 Pesan: {content}\n\nemoji: 🔥 💦 😍"
-            )
-            # Notifikasi admin
-            for admin_id in ADMIN_IDS:
-                await context.bot.send_message(
-                    chat_id=admin_id,
-                    text=f"[{topic_name}] {prefix}\n{content}"
-                )
+    sent_msg = None
+    caption_text = update.message.caption or "Tidak ada caption"
+
+    # ===== Menfess / Teks =====
+    if topic_name == "Menfess" and update.message.text:
+        sent_msg = await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"{prefix}\n\n💬 Pesan: {update.message.text}\n\nemoji: 🔥 💦 😍"
+        )
 
     # ===== Pap / Eksib =====
-    elif topic_name in ["Pap Pisang","Pap Cwo","Pap Lacur","Eksib"]:
-        if update.message.photo or update.message.video:
-            media = update.message.photo[-1].file_id if update.message.photo else update.message.video.file_id
-            caption = update.message.caption or "Tidak ada caption"
-            if update.message.photo:
-                sent_msg = await context.bot.send_photo(
-                    chat_id=CHAT_ID,
-                    message_thread_id=message_thread_id,
-                    photo=media,
-                    caption=f"{prefix}\nFoto/Video + Caption: {caption}\nemoji: 🔥 💦 😍"
-                )
-            else:
-                sent_msg = await context.bot.send_video(
-                    chat_id=CHAT_ID,
-                    message_thread_id=message_thread_id,
-                    video=media,
-                    caption=f"{prefix}\nFoto/Video + Caption: {caption}\nemoji: 🔥 💦 😍"
-                )
-            # Notifikasi admin
-            for admin_id in ADMIN_IDS:
-                if update.message.photo:
-                    await context.bot.send_photo(admin_id, media, caption=f"[{topic_name}] {prefix}\n{caption}")
-                else:
-                    await context.bot.send_video(admin_id, media, caption=f"[{topic_name}] {prefix}\n{caption}")
+    elif topic_name in ["Pap Pisang","Pap Cwo","Pap Lacur","Eksib"] and (update.message.photo or update.message.video):
+        media = update.message.photo[-1].file_id if update.message.photo else update.message.video.file_id
+        if update.message.photo:
+            sent_msg = await context.bot.send_photo(chat_id, media, caption=f"{prefix}\nFoto/Video + Caption: {caption_text}\nemoji: 🔥 💦 😍")
+        else:
+            sent_msg = await context.bot.send_video(chat_id, media, caption=f"{prefix}\nFoto/Video + Caption: {caption_text}\nemoji: 🔥 💦 😍")
 
     # ===== Moan (voice only) =====
-    elif topic_name in ["Moan Cwo","Moan Cwe"]:
-        if update.message.voice or update.message.audio:
-            media = update.message.voice.file_id if update.message.voice else update.message.audio.file_id
-            sent_msg = await context.bot.send_voice(
-                chat_id=CHAT_ID,
-                message_thread_id=message_thread_id,
-                voice=media,
-                caption=f"{prefix}\nVoice Note + Caption: {update.message.caption or 'Tidak ada caption'}\nemoji: 🔥 💦 😍"
-            )
-            # Notifikasi admin
-            for admin_id in ADMIN_IDS:
-                await context.bot.send_voice(admin_id, media, caption=f"[{topic_name}] {prefix}\n{update.message.caption or 'Tidak ada caption'}")
+    elif topic_name in ["Moan Cwo","Moan Cwe"] and (update.message.voice or update.message.audio):
+        media = update.message.voice.file_id if update.message.voice else update.message.audio.file_id
+        sent_msg = await context.bot.send_voice(chat_id, media, caption=f"{prefix}\nVoice Note + Caption: {caption_text}\nemoji: 🔥 💦 😍")
 
     else:
         await update.message.reply_text("⚠️ Media tidak sesuai dengan topik.")
+        return
 
-    # Auto-delete
-    if user_state[uid].get("auto_delete"):
+    # ===== Notifikasi admin =====
+    for admin_id in ADMIN_IDS:
+        try:
+            if update.message.photo:
+                await context.bot.send_photo(admin_id, media, caption=f"[{topic_name}] {prefix}\n{caption_text}")
+            elif update.message.video:
+                await context.bot.send_video(admin_id, media, caption=f"[{topic_name}] {prefix}\n{caption_text}")
+            elif update.message.voice or update.message.audio:
+                await context.bot.send_voice(admin_id, media, caption=f"[{topic_name}] {prefix}\n{caption_text}")
+            else:
+                await context.bot.send_message(admin_id, f"[{topic_name}] {prefix}\n{caption_text}")
+        except:
+            continue
+
+    # ===== Auto-delete =====
+    if sent_msg and user_state[uid].get("auto_delete"):
         minutes = user_state[uid]["delete_minutes"]
-        asyncio.create_task(auto_delete_message(context, CHAT_ID, sent_msg.message_id, minutes))
+        asyncio.create_task(auto_delete_message(context, sent_msg.chat_id, sent_msg.message_id, minutes))
 
 # ===== AUTO DELETE =====
 async def auto_delete_message(context, chat_id, message_id, minutes):
