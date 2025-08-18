@@ -1,11 +1,6 @@
 import os
-import asyncio
 from dotenv import load_dotenv
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-)
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -40,10 +35,12 @@ HASHTAGS = {
 
 EMOJI_LIST = ["🔥", "💦", "😍"]
 
-user_state = {}       # {user_id: {"topic":..., "hashtag":..., "gender":..., "last_message_id":...}}
-reaction_data = {}    # {message_id: {emoji: set(user_ids)}}
+# State user dan reaction
+user_state = {}      # {user_id: {"topic":..., "hashtag":..., "gender":..., "last_message_id":...}}
+reaction_data = {}   # {message_id: {emoji: set(user_ids)}}
 
-# ======= Handler Gender =======
+
+# ================== PILIH GENDER ==================
 async def ask_gender(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.chat.type != "private":
         return
@@ -51,10 +48,10 @@ async def ask_gender(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Cewek 👩‍🦰", callback_data="gender_cwe")],
         [InlineKeyboardButton("Cowok 👦", callback_data="gender_cwo")],
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
-        "Pilih gender kamu untuk pesan anonim:", reply_markup=reply_markup
+        "Pilih gender kamu untuk pesan anonim:", reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
 
 async def gender_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -68,20 +65,22 @@ async def gender_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ Gender tersimpan. Sekarang ketik /start untuk pilih topik."
     )
 
-# ======= Start dan pilih topik =======
+
+# ================== START & PILIH TOPIK ==================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.chat.type != "private":
         return
-    if update.message.from_user.id not in user_state or "gender" not in user_state[update.message.from_user.id]:
+
+    user_id = update.message.from_user.id
+    if user_id not in user_state or "gender" not in user_state[user_id]:
         await ask_gender(update, context)
         return
 
-    keyboard = [
-        [InlineKeyboardButton(name, callback_data=f"topic_{name}")]
-        for name in TOPICS.keys()
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("📌 Pilih topik yang ingin kamu kirim:", reply_markup=reply_markup)
+    keyboard = [[InlineKeyboardButton(name, callback_data=f"topic_{name}")] for name in TOPICS.keys()]
+    await update.message.reply_text(
+        "📌 Pilih topik yang ingin kamu kirim:", reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
 
 async def topic_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -102,14 +101,14 @@ async def topic_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "keluhkesah": "tempat mengeluh",
             }.items()
         ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
         await query.message.reply_text(
-            "Pilih hashtag untuk pesan Menfess-mu:", reply_markup=reply_markup
+            "Pilih hashtag untuk pesan Menfess-mu:", reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
         await query.message.reply_text(
             f"Topik '{topic}' dipilih. Sekarang kirim pesan / media sesuai topik."
         )
+
 
 async def hashtag_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -122,7 +121,8 @@ async def hashtag_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Hashtag {HASHTAGS.get(tag, '')} dipilih. Silakan kirim pesan Menfess-mu sekarang."
     )
 
-# ======= Handle kirim pesan =======
+
+# ================== HANDLE PESAN ==================
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.chat.type != "private":
         return
@@ -136,7 +136,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     thread_id = TOPICS.get(topic)
     gender = user_state[user_id]["gender"]
 
-    # Format gender dengan 1 enter sebelum isi pesan
+    # Format gender
     if gender == "cwe":
         gender_text = "🕵 Pesan anonim dari: 👩‍🦰\nCewek\n\n"
     elif gender == "cwo":
@@ -146,7 +146,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     sent_msg = None
 
-    # Menfess / teks
+    # ======= MENFESS / TEKS =======
     if topic == "Menfess":
         text = update.message.text or ""
         if not text:
@@ -154,59 +154,51 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         hashtag = HASHTAGS.get(user_state[user_id].get("hashtag"), "#menfess")
         full_text = f"{gender_text}{text}\n\n{hashtag}"
-        sent_msg = await context.bot.send_message(
-            chat_id=GROUP_ID,
-            text=full_text,
-            message_thread_id=thread_id
-        )
+        sent_msg = await context.bot.send_message(chat_id=GROUP_ID, text=full_text, message_thread_id=thread_id)
 
-    # Foto / video
+    # ======= FOTO / VIDEO =======
     elif topic in ["Pap Cwo", "Pap Lacur"]:
         if update.message.photo:
             photo_file_id = update.message.photo[-1].file_id
             sent_msg = await context.bot.send_photo(
-                chat_id=GROUP_ID,
-                photo=photo_file_id,
+                chat_id=GROUP_ID, photo=photo_file_id,
                 caption=gender_text + (update.message.caption or ""),
-                message_thread_id=thread_id,
+                message_thread_id=thread_id
             )
         elif update.message.video:
             video_file_id = update.message.video.file_id
             sent_msg = await context.bot.send_video(
-                chat_id=GROUP_ID,
-                video=video_file_id,
+                chat_id=GROUP_ID, video=video_file_id,
                 caption=gender_text + (update.message.caption or ""),
-                message_thread_id=thread_id,
+                message_thread_id=thread_id
             )
         else:
             await update.message.reply_text("Topik ini hanya menerima foto atau video.")
             return
 
-    # Voice / audio
+    # ======= VOICE / AUDIO =======
     elif topic in ["Moan Cwo", "Moan Cwe"]:
         if not (update.message.voice or update.message.audio):
             await update.message.reply_text("Topik ini hanya menerima voice/audio.")
             return
         if update.message.voice:
             sent_msg = await context.bot.send_voice(
-                chat_id=GROUP_ID,
-                voice=update.message.voice.file_id,
+                chat_id=GROUP_ID, voice=update.message.voice.file_id,
                 caption=gender_text + (update.message.caption or ""),
-                message_thread_id=thread_id,
+                message_thread_id=thread_id
             )
         elif update.message.audio:
             sent_msg = await context.bot.send_audio(
-                chat_id=GROUP_ID,
-                audio=update.message.audio.file_id,
+                chat_id=GROUP_ID, audio=update.message.audio.file_id,
                 caption=gender_text + (update.message.caption or ""),
-                message_thread_id=thread_id,
+                message_thread_id=thread_id
             )
 
     else:
         await update.message.reply_text("Topik tidak dikenal.")
         return
 
-    # Notifikasi admin
+    # ======= NOTIF ADMIN =======
     for admin_id in ADMIN_IDS:
         try:
             await context.bot.send_message(
@@ -218,29 +210,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(f"Pesan berhasil dikirim ke topik '{topic}'.")
 
+    # ======= PASANG REACTION =======
     if sent_msg:
         user_state[user_id]["last_message_id"] = sent_msg.message_id
         await add_reaction_keyboard(sent_msg, context)
 
 
-# ======= Reaction keyboard + tampil nama user =======
+# ================== REACTION EMOJI ==================
 async def add_reaction_keyboard(message, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [
-            InlineKeyboardButton(f"{emoji} 0", callback_data=f"react_{emoji}_{message.message_id}")
-            for emoji in EMOJI_LIST
-        ]
-    ]
+    keyboard = [[InlineKeyboardButton(f"{emoji} 0", callback_data=f"react_{emoji}_{message.message_id}") for emoji in EMOJI_LIST]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     try:
-        await context.bot.edit_message_reply_markup(
-            chat_id=message.chat_id,
-            message_id=message.message_id,
-            reply_markup=reply_markup,
-        )
+        await context.bot.edit_message_reply_markup(chat_id=message.chat_id, message_id=message.message_id, reply_markup=reply_markup)
     except Exception:
         pass
     reaction_data[message.message_id] = {emoji: set() for emoji in EMOJI_LIST}
+
 
 async def reaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -263,115 +248,49 @@ async def reaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         reaction_data[msg_id][emoji].add(user_id)
 
-    # update tombol
-    keyboard = [
-        [
-            InlineKeyboardButton(
-                f"{e} {len(reaction_data[msg_id][e])}",
-                callback_data=f"react_{e}_{msg_id}"
-            )
-            for e in EMOJI_LIST
-        ]
-    ]
+    # update tombol emoji
+    keyboard = [[InlineKeyboardButton(f"{e} {len(reaction_data[msg_id][e])}", callback_data=f"react_{e}_{msg_id}") for e in EMOJI_LIST]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    try:
-        await context.bot.edit_message_reply_markup(
-            chat_id=GROUP_ID,
-            message_id=msg_id,
-            reply_markup=reply_markup,
-        )
-    except Exception:
-        pass
-        
-    # tampil nama user di bawah tombol (bisa di edit caption)
-    names = []
+
+    # tampil nama user yang like di caption
+    names_text = []
     for e in EMOJI_LIST:
         if reaction_data[msg_id][e]:
-            member_names = [context.bot.get_chat_member(GROUP_ID, uid).user.full_name for uid in reaction_data[msg_id][e]]
-            names.append(f"{e}: {', '.join(member_names)}")
-    if names:
-        try:
-            await context.bot.send_message(
-                chat_id=GROUP_ID,
-                text="\n".join(names)
-            )
-        except Exception:
-            pass
+            member_names = []
+            for uid in reaction_data[msg_id][e]:
+                try:
+                    member = await context.bot.get_chat_member(GROUP_ID, uid)
+                    member_names.append(member.user.full_name)
+                except:
+                    continue
+            if member_names:
+                names_text.append(f"{e}: {', '.join(member_names)}")
 
+    final_text = "\n".join(names_text) if names_text else None
 
-    await update.message.reply_text(f"Pesan berhasil dikirim ke topik '{topic}'.")
-
-    if sent_msg:
-        user_state[user_id]["last_message_id"] = sent_msg.message_id
-        await add_reaction_keyboard(sent_msg, context)
-
-# ======= Reaction emoji =======
-async def add_reaction_keyboard(message, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [
-            InlineKeyboardButton(f"{emoji} 0", callback_data=f"react_{emoji}_{message.message_id}")
-            for emoji in EMOJI_LIST
-        ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
     try:
-        await context.bot.edit_message_reply_markup(
-            chat_id=message.chat_id,
-            message_id=message.message_id,
-            reply_markup=reply_markup,
-        )
-    except Exception:
-        pass
-    reaction_data[message.message_id] = {emoji: set() for emoji in EMOJI_LIST}
-
-async def reaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-    user_id = query.from_user.id
-    if not data.startswith("react_"):
-        return
-    _, emoji, msg_id_str = data.split("_")
-    msg_id = int(msg_id_str)
-    if msg_id not in reaction_data:
-        reaction_data[msg_id] = {e: set() for e in EMOJI_LIST}
-
-    if user_id in reaction_data[msg_id][emoji]:
-        reaction_data[msg_id][emoji].remove(user_id)
-    else:
-        reaction_data[msg_id][emoji].add(user_id)
-
-    keyboard = [
-        [
-            InlineKeyboardButton(
-                f"{e} {len(reaction_data[msg_id][e])}", callback_data=f"react_{e}_{msg_id}"
-            )
-            for e in EMOJI_LIST
-        ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    try:
-        await context.bot.edit_message_reply_markup(
-            chat_id=GROUP_ID,
-            message_id=msg_id,
-            reply_markup=reply_markup,
-        )
+        await context.bot.edit_message_reply_markup(chat_id=GROUP_ID, message_id=msg_id, reply_markup=reply_markup)
+        if final_text:
+            try:
+                await context.bot.edit_message_caption(chat_id=GROUP_ID, message_id=msg_id, caption=final_text, reply_markup=reply_markup)
+            except:
+                await context.bot.send_message(chat_id=GROUP_ID, text=final_text)
     except Exception:
         pass
 
-# ======= Main Application =======
+
+# ================== MAIN ==================
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(gender_choice, pattern="^gender_"))
     app.add_handler(CallbackQueryHandler(topic_choice, pattern="^topic_"))
     app.add_handler(CallbackQueryHandler(hashtag_choice, pattern="^hashtag_"))
     app.add_handler(CallbackQueryHandler(reaction_handler, pattern="^react_"))
     app.add_handler(MessageHandler(filters.ALL & filters.ChatType.PRIVATE, handle_message))
-
     print("Bot berjalan...")
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
