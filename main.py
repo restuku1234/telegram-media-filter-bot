@@ -136,7 +136,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     thread_id = TOPICS.get(topic)
     gender = user_state[user_id]["gender"]
 
-    # Format gender
+    # Format gender dengan 1 enter sebelum isi pesan
     if gender == "cwe":
         gender_text = "🕵 Pesan anonim dari: 👩‍🦰\nCewek\n\n"
     elif gender == "cwo":
@@ -146,25 +146,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     sent_msg = None
 
-    if topic in ["Moan Cwo", "Moan Cwe"]:
-        if not (update.message.voice or update.message.audio):
-            await update.message.reply_text("Topik ini hanya menerima voice/audio.")
+    # Menfess / teks
+    if topic == "Menfess":
+        text = update.message.text or ""
+        if not text:
+            await update.message.reply_text("Kirim pesan teks untuk Menfess.")
             return
-        if update.message.voice:
-            sent_msg = await context.bot.send_voice(
-                chat_id=GROUP_ID,
-                voice=update.message.voice.file_id,
-                caption=gender_text + (update.message.caption or ""),
-                message_thread_id=thread_id,
-            )
-        elif update.message.audio:
-            sent_msg = await context.bot.send_audio(
-                chat_id=GROUP_ID,
-                audio=update.message.audio.file_id,
-                caption=gender_text + (update.message.caption or ""),
-                message_thread_id=thread_id,
-            )
+        hashtag = HASHTAGS.get(user_state[user_id].get("hashtag"), "#menfess")
+        full_text = f"{gender_text}{text}\n\n{hashtag}"
+        sent_msg = await context.bot.send_message(
+            chat_id=GROUP_ID,
+            text=full_text,
+            message_thread_id=thread_id
+        )
 
+    # Foto / video
     elif topic in ["Pap Cwo", "Pap Lacur"]:
         if update.message.photo:
             photo_file_id = update.message.photo[-1].file_id
@@ -186,16 +182,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Topik ini hanya menerima foto atau video.")
             return
 
-    elif topic == "Menfess":
-        text = update.message.text or ""
-        if not text:
-            await update.message.reply_text("Kirim pesan teks untuk Menfess.")
+    # Voice / audio
+    elif topic in ["Moan Cwo", "Moan Cwe"]:
+        if not (update.message.voice or update.message.audio):
+            await update.message.reply_text("Topik ini hanya menerima voice/audio.")
             return
-        hashtag = HASHTAGS.get(user_state[user_id].get("hashtag"), "#menfess")
-        full_text = f"{gender_text}{text}\n\n{hashtag}"
-        sent_msg = await context.bot.send_message(
-            chat_id=GROUP_ID, text=full_text, message_thread_id=thread_id
-        )
+        if update.message.voice:
+            sent_msg = await context.bot.send_voice(
+                chat_id=GROUP_ID,
+                voice=update.message.voice.file_id,
+                caption=gender_text + (update.message.caption or ""),
+                message_thread_id=thread_id,
+            )
+        elif update.message.audio:
+            sent_msg = await context.bot.send_audio(
+                chat_id=GROUP_ID,
+                audio=update.message.audio.file_id,
+                caption=gender_text + (update.message.caption or ""),
+                message_thread_id=thread_id,
+            )
+
     else:
         await update.message.reply_text("Topik tidak dikenal.")
         return
@@ -209,6 +215,89 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         except Exception:
             pass
+
+    await update.message.reply_text(f"Pesan berhasil dikirim ke topik '{topic}'.")
+
+    if sent_msg:
+        user_state[user_id]["last_message_id"] = sent_msg.message_id
+        await add_reaction_keyboard(sent_msg, context)
+
+
+# ======= Reaction keyboard + tampil nama user =======
+async def add_reaction_keyboard(message, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [
+            InlineKeyboardButton(f"{emoji} 0", callback_data=f"react_{emoji}_{message.message_id}")
+            for emoji in EMOJI_LIST
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    try:
+        await context.bot.edit_message_reply_markup(
+            chat_id=message.chat_id,
+            message_id=message.message_id,
+            reply_markup=reply_markup,
+        )
+    except Exception:
+        pass
+    reaction_data[message.message_id] = {emoji: set() for emoji in EMOJI_LIST}
+
+async def reaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    user_id = query.from_user.id
+
+    if not data.startswith("react_"):
+        return
+
+    _, emoji, msg_id_str = data.split("_")
+    msg_id = int(msg_id_str)
+
+    if msg_id not in reaction_data:
+        reaction_data[msg_id] = {e: set() for e in EMOJI_LIST}
+
+    # toggle like/unlike
+    if user_id in reaction_data[msg_id][emoji]:
+        reaction_data[msg_id][emoji].remove(user_id)
+    else:
+        reaction_data[msg_id][emoji].add(user_id)
+
+    # update tombol
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                f"{e} {len(reaction_data[msg_id][e])}",
+                callback_data=f"react_{e}_{msg_id}"
+            )
+            for e in EMOJI_LIST
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    try:
+        await context.bot.edit_message_reply_markup(
+            chat_id=GROUP_ID,
+            message_id=msg_id,
+            reply_markup=reply_markup,
+        )
+    except Exception:
+        pass
+        
+    # tampil nama user di bawah tombol (bisa di edit caption)
+    names = []
+    for e in EMOJI_LIST:
+        if reaction_data[msg_id][e]:
+            member_names = [context.bot.get_chat_member(GROUP_ID, uid).user.full_name for uid in reaction_data[msg_id][e]]
+            names.append(f"{e}: {', '.join(member_names)}")
+    if names:
+        try:
+            await context.bot.send_message(
+                chat_id=GROUP_ID,
+                text="\n".join(names)
+            )
+        except Exception:
+            pass
+
 
     await update.message.reply_text(f"Pesan berhasil dikirim ke topik '{topic}'.")
 
